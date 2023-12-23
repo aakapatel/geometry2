@@ -76,9 +76,7 @@ void createExtrapolationException2(ros::Time t0, ros::Time t1, std::string* erro
 {
   if (error_str)
   {
-    // Want this to come out positive, because this is a future extrapolation problem with t0
-    // t0 needs to come first because it will be bigger than t1
-    ros::Duration tdiff = t0 - t1;
+    ros::Duration tdiff = t1 - t0;
     char str[163]; // Text without formatting strings has 102, each timestamp has up to 20
     snprintf(
         str, sizeof(str),
@@ -277,8 +275,13 @@ bool TimeCache::insertData(const TransformStorage& new_data, std::string* error_
   }
   if (storage_it != storage_.end() && storage_it->stamp_ == new_data.stamp_)
   {
-    if (error_str)
+    // Throttle TF_REPEATED_DATA error message to 10 seconds.
+    // Console bridge does not have throttling, so implement throttling here.
+    // Because insertData may be called prior to ros::Time being initialized,
+    // use the stamp from the message as "now".
+    if (error_str && new_data.stamp_ > last_repeated_warn_time_ + ros::Duration(1000.0))
     {
+      last_repeated_warn_time_ = new_data.stamp_;
       *error_str = "TF_REPEATED_DATA ignoring data with redundant timestamp";
     }
     return false;
@@ -294,6 +297,8 @@ bool TimeCache::insertData(const TransformStorage& new_data, std::string* error_
 
 void TimeCache::clearList()
 {
+  // Reset the TF_REPEATED_DATA error message throttle.
+  last_repeated_warn_time_ = ros::Time(0.0);
   storage_.clear();
 }
 
